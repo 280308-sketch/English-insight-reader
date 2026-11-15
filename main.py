@@ -5,8 +5,11 @@ from openai import OpenAI
 
 app = FastAPI()
 
-# Khởi tạo client OpenAI (tự động nhận biến môi trường trên Cloud hoặc máy cá nhân)
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+# Khởi tạo client kết nối với Groq API miễn phí (tương thích chuẩn OpenAI)
+client = OpenAI(
+    api_key=os.getenv("GROQ_API_KEY"),
+    base_url="https://api.groq.com/openai/v1"
+)
 
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -34,12 +37,12 @@ HTML_TEMPLATE = """
     <h2>English Reading AI</h2>
     
     <div class="tabs">
-        <button class="tab active" onclick="setMode('academic')">Academic (Đoạn dài)</button>
-        <button class="tab" onclick="setMode('quick')">Quick Fact (Lướt web)</button>
+        <button class="tab {{ academic_active }}" onclick="setMode('academic')">Academic (Đoạn dài)</button>
+        <button class="tab {{ quick_active }}" onclick="setMode('quick')">Quick Fact (Lướt web)</button>
     </div>
 
     <form method="post" action="/evaluate">
-        <input type="hidden" name="mode" id="modeInput" value="academic">
+        <input type="hidden" name="mode" id="modeInput" value="{{ current_mode }}">
         
         <p><b>Đoạn văn tiếng Anh cần đọc:</b></p>
         <div class="content-box">
@@ -74,6 +77,9 @@ async def home(mode: str = "academic"):
         sample_text = "Neuroplasticity refers to the brain's ability to reorganize itself by forming new neural connections throughout life. This dynamic process allows the neurons in the brain to compensate for injury and disease and to adjust their activities in response to new situations or to changes in the environment."
     
     html = HTML_TEMPLATE.replace("{{ current_text }}", sample_text) \
+                        .replace("{{ current_mode }}", mode) \
+                        .replace("{{ academic_active }}", "active" if mode == "academic" else "") \
+                        .replace("{{ quick_active }}", "active" if mode == "quick" else "") \
                         .replace("{{ user_response_val }}", "") \
                         .replace("{{ evaluation_block }}", "")
     return HTMLResponse(content=html)
@@ -89,8 +95,9 @@ async def evaluate(mode: str = Form(...), english_text: str = Form(...), user_re
         Hãy đánh giá xem người dùng đã hiểu đúng ý chính hay chưa, chỉ ra các điểm họ hiểu tốt, và bổ sung những ý quan trọng mà họ còn thiếu sót. Trình bày ngắn gọn, súc tích, bằng tiếng Việt.
         """
         
+        # Gọi mô hình AI miễn phí và tốc độ cao của Groq
         response = client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="llama-3.3-70b-versatile",
             messages=[{"role": "user", "content": prompt}]
         )
         eval_result = response.choices[0].message.content.replace('\n', '<br>')
@@ -104,12 +111,15 @@ async def evaluate(mode: str = Form(...), english_text: str = Form(...), user_re
     except Exception as e:
         eval_block = f"""
         <div class="result" style="background: #fadbd8; border-color: #f5b7b1;">
-            <h3 style="color: #c0392b;">Lỗi xử lý AI:</h3>
+            <h3 style="color: #c0392b;">Chi tiết lỗi từ AI:</h3>
             <p>{str(e)}</p>
         </div>
         """
     
     html = HTML_TEMPLATE.replace("{{ current_text }}", english_text) \
+                        .replace("{{ current_mode }}", mode) \
+                        .replace("{{ academic_active }}", "active" if mode == "academic" else "") \
+                        .replace("{{ quick_active }}", "active" if mode == "quick" else "") \
                         .replace("{{ user_response_val }}", user_response) \
                         .replace("{{ evaluation_block }}", eval_block)
     return HTMLResponse(content=html)
