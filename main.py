@@ -5,10 +5,10 @@ from openai import OpenAI
 
 app = FastAPI()
 
-# Khởi tạo client kết nối với Groq API miễn phí (tương thích chuẩn OpenAI)
+# Khởi tạo client kết nối với Gemini API (dùng chuẩn tương thích OpenAI của Google)
 client = OpenAI(
-    api_key=os.getenv("GROQ_API_KEY"),
-    base_url="https://api.groq.com/openai/v1"
+    api_key=os.getenv("GEMINI_API_KEY"),
+    base_url="https://generativelanguage.googleapis.com/v1beta/openai/"
 )
 
 HTML_TEMPLATE = """
@@ -95,9 +95,9 @@ async def evaluate(mode: str = Form(...), english_text: str = Form(...), user_re
         Hãy đánh giá xem người dùng đã hiểu đúng ý chính hay chưa, chỉ ra các điểm họ hiểu tốt, và bổ sung những ý quan trọng mà họ còn thiếu sót. Trình bày ngắn gọn, súc tích, bằng tiếng Việt.
         """
         
-        # Gọi mô hình AI miễn phí và tốc độ cao của Groq
+        # Sử dụng mô hình Gemini Flash siêu nhanh và ổn định của Google
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model="gemini-2.5-flash",
             messages=[{"role": "user", "content": prompt}]
         )
         eval_result = response.choices[0].message.content.replace('\n', '<br>')
