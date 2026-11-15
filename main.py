@@ -7,8 +7,7 @@ from openai import OpenAI
 app = FastAPI()
 
 # Thay thế đoạn trong ngoặc bằng API Key của bạn hoặc cấu hình biến môi trường
-client = OpenAI(api_key="NHẬP_API_KEY_OPENAI_CỦA_BẠN_VÀO_ĐÂY")
-
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 # Giao diện HTML di động tích hợp sẵn (2 chế độ Academic và Quick Fact)
 HTML_TEMPLATE = """
 <!DOCTYPE html>
@@ -87,21 +86,23 @@ async def home(mode: str = "academic"):
 
 @app.post("/evaluate", response_class=HTMLResponse)
 async def evaluate(mode: str = Form(...), english_text: str = Form(...), user_response: str = Form(...)):
-    # Prompt yêu cầu AI chấm điểm và đánh giá
-    prompt = f"""
-    Bạn là một giảng viên tiếng Anh và chuyên gia phân tích nội dung. 
-    Đoạn văn gốc tiếng Anh: "{english_text}"
-    Phản hồi bằng tiếng Việt của người dùng về ý nghĩa đoạn văn: "{user_response}"
+    try:
+        prompt = f"""
+        Bạn là một giảng viên tiếng Anh và chuyên gia phân tích nội dung. 
+        Đoạn văn gốc tiếng Anh: "{english_text}"
+        Phản hồi bằng tiếng Việt của người dùng về ý nghĩa đoạn văn: "{user_response}"
+        
+        Hãy đánh giá xem người dùng đã hiểu đúng ý chính hay chưa, chỉ ra các điểm họ hiểu tốt, và bổ sung những ý quan trọng mà họ còn thiếu sót. Trình bày ngắn gọn, súc tích, bằng tiếng Việt.
+        """
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}]
+        )
+        eval_result = response.choices[0].message.content.replace('\n', '<br>')
+    except Exception as e:
+        # Nếu có lỗi (sai key, hết tiền, mất mạng), hiển thị chi tiết lỗi màu đỏ lên giao diện
+        eval_result = f"<b style='color: red;'>Lỗi kết nối AI:</b> {str(e)}"
     
-    Hãy đánh giá xem người dùng đã hiểu đúng ý chính hay chưa, chỉ ra các điểm họ hiểu tốt, và bổ sung những ý quan trọng mà họ còn thiếu sót. Trình bày ngắn gọn, súc tích, bằng tiếng Việt.
-    """
-    
-    response = client.chat.completions.create(
-        model="gpt-4o-mini",
-        messages=[{"role": "user", "content": prompt}]
-    )
-    eval_result = response.choices[0].message.content.replace('\n', '<br>')
-    
-    # Trả lại giao diện kèm kết quả
     rendered = HTML_TEMPLATE.replace("{{ current_text }}", english_text).replace("{{ evaluation }}", eval_result)
     return HTMLResponse(content=rendered)
