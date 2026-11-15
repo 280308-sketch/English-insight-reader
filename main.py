@@ -1,14 +1,13 @@
 import os
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse
-from fastapi.templating import Jinja2Templates
 from openai import OpenAI
 
 app = FastAPI()
 
-# Thay thế đoạn trong ngoặc bằng API Key của bạn hoặc cấu hình biến môi trường
+# Khởi tạo client OpenAI (tự động nhận biến môi trường trên Cloud hoặc máy cá nhân)
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-# Giao diện HTML di động tích hợp sẵn (2 chế độ Academic và Quick Fact)
+
 HTML_TEMPLATE = """
 <!DOCTYPE html>
 <html lang="vi">
@@ -34,7 +33,6 @@ HTML_TEMPLATE = """
 <div class="container">
     <h2>English Reading AI</h2>
     
-    <!-- Chọn Chế độ -->
     <div class="tabs">
         <button class="tab active" onclick="setMode('academic')">Academic (Đoạn dài)</button>
         <button class="tab" onclick="setMode('quick')">Quick Fact (Lướt web)</button>
@@ -50,23 +48,17 @@ HTML_TEMPLATE = """
         <input type="hidden" name="english_text" value="{{ current_text }}">
 
         <p><b>Bạn hiểu đoạn này thế nào? (Nhập bằng tiếng Việt):</b></p>
-        <textarea name="user_response" placeholder="Viết tóm tắt hoặc ý chính theo hiểu biết của bạn..." required></textarea>
+        <textarea name="user_response" placeholder="Viết tóm tắt hoặc ý chính theo hiểu biết của bạn..." required>{{ user_response_val }}</textarea>
         
         <button type="submit" class="submit-btn">Gửi AI Đánh Giá</button>
     </form>
 
-    {% if evaluation %}
-    <div class="result">
-        <h3>Kết quả đánh giá từ AI:</h3>
-        <p>{{ evaluation | safe }}</p>
-    </div>
-    {% endif %}
+    {{ evaluation_block }}
 </div>
 
 <script>
     function setMode(mode) {
         document.getElementById('modeInput').value = mode;
-        // Chuyển hướng hoặc tải lại với mode tương ứng (có thể tối ưu thêm bằng JS, tạm thời để form xử lý đơn giản)
         window.location.href = "/?mode=" + mode;
     }
 </script>
@@ -76,13 +68,15 @@ HTML_TEMPLATE = """
 
 @app.get("/", response_class=HTMLResponse)
 async def home(mode: str = "academic"):
-    # Mẫu dữ liệu tạm thời (sau này bạn có thể cho AI tự động sinh đoạn văn từ API)
     if mode == "quick":
         sample_text = "The tongue map is a long-standing scientific myth. Different areas of the human tongue can perceive all basic tastes roughly equally, rather than specialized regions for sweet, salty, sour, and bitter."
     else:
         sample_text = "Neuroplasticity refers to the brain's ability to reorganize itself by forming new neural connections throughout life. This dynamic process allows the neurons in the brain to compensate for injury and disease and to adjust their activities in response to new situations or to changes in the environment."
     
-    return HTMLResponse(content=HTML_TEMPLATE.replace("{{ current_text }}", sample_text).replace("{{ evaluation }}", ""))
+    html = HTML_TEMPLATE.replace("{{ current_text }}", sample_text) \
+                        .replace("{{ user_response_val }}", "") \
+                        .replace("{{ evaluation_block }}", "")
+    return HTMLResponse(content=html)
 
 @app.post("/evaluate", response_class=HTMLResponse)
 async def evaluate(mode: str = Form(...), english_text: str = Form(...), user_response: str = Form(...)):
@@ -100,9 +94,22 @@ async def evaluate(mode: str = Form(...), english_text: str = Form(...), user_re
             messages=[{"role": "user", "content": prompt}]
         )
         eval_result = response.choices[0].message.content.replace('\n', '<br>')
+        
+        eval_block = f"""
+        <div class="result">
+            <h3>Kết quả đánh giá từ AI:</h3>
+            <p>{eval_result}</p>
+        </div>
+        """
     except Exception as e:
-        # Nếu có lỗi (sai key, hết tiền, mất mạng), hiển thị chi tiết lỗi màu đỏ lên giao diện
-        eval_result = f"<b style='color: red;'>Lỗi kết nối AI:</b> {str(e)}"
+        eval_block = f"""
+        <div class="result" style="background: #fadbd8; border-color: #f5b7b1;">
+            <h3 style="color: #c0392b;">Lỗi xử lý AI:</h3>
+            <p>{str(e)}</p>
+        </div>
+        """
     
-    rendered = HTML_TEMPLATE.replace("{{ current_text }}", english_text).replace("{{ evaluation }}", eval_result)
-    return HTMLResponse(content=rendered)
+    html = HTML_TEMPLATE.replace("{{ current_text }}", english_text) \
+                        .replace("{{ user_response_val }}", user_response) \
+                        .replace("{{ evaluation_block }}", eval_block)
+    return HTMLResponse(content=html)
