@@ -97,7 +97,7 @@ async def evaluate(mode: str = Form(...), english_text: str = Form(...), user_re
         
         # Gọi mô hình AI miễn phí và tốc độ cao của Groq
         response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
+            model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}]
         )
         eval_result = response.choices[0].message.content.replace('\n', '<br>')
